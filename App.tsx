@@ -1,6 +1,6 @@
 ﻿import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { apiFetch, ApiError, clearToken, getApiUrl, getToken, saveApiUrl, saveToken } from './src/api';
 import type { Appointment, Beautician, BookingDraft, Center, Profile, Service } from './src/types';
 
@@ -52,21 +52,79 @@ function AuthScreen({ onSuccess }: { onSuccess: () => void }) {
   const [loading, setLoading] = useState(false);
   const [apiUrl, setApiUrl] = useState('');
   const [showServer, setShowServer] = useState(false);
+  const [linkExisting, setLinkExisting] = useState(false);
+  const [showLinkPrompt, setShowLinkPrompt] = useState(false);
+  const checkedContactPair = useRef('');
+  const contactLookupId = useRef(0);
   const identifierLabel = mode === 'login' ? 'Email o telefono' : 'Email obbligatoria';
 
   useEffect(() => { getApiUrl().then(setApiUrl); }, []);
+  const checkExistingProfile = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = phone.trim();
+    if (mode !== 'register' || !/^\S+@\S+\.\S+$/.test(normalizedEmail) || !normalizedPhone) return;
+
+    const contactPair = `${normalizedEmail}\n${normalizedPhone}`;
+    if (checkedContactPair.current === contactPair) return;
+    checkedContactPair.current = contactPair;
+    const lookupId = ++contactLookupId.current;
+
+    try {
+      const result = await apiFetch<{ link_available: boolean }>('/api/mobile/auth/link-check', {
+        method: 'POST',
+        body: JSON.stringify({ email: normalizedEmail, phone: normalizedPhone }),
+      });
+      if (lookupId !== contactLookupId.current || !result.link_available) return;
+
+      setShowLinkPrompt(true);
+    } catch {
+      checkedContactPair.current = '';
+    }
+  };
+
+  const updateEmail = (value: string) => {
+    setEmail(value);
+    setLinkExisting(false);
+    checkedContactPair.current = '';
+    contactLookupId.current += 1;
+  };
+
+  const updatePhone = (value: string) => {
+    setPhone(value);
+    setLinkExisting(false);
+    checkedContactPair.current = '';
+    contactLookupId.current += 1;
+  };
+
+  const changeMode = (nextMode: AuthMode) => {
+    setMode(nextMode);
+    setLinkExisting(false);
+    checkedContactPair.current = '';
+    contactLookupId.current += 1;
+  };
+
   const submit = async () => {
     const normalizedEmail = email.trim();
     const normalizedPhone = phone.trim();
-    if (!password || (mode === 'login' && !normalizedEmail) || (mode === 'register' && (!firstName || !lastName || !normalizedEmail || !normalizedPhone))) {
+    if (!password || (mode === 'login' && !normalizedEmail) || (mode === 'register' && (!normalizedEmail || !normalizedPhone || (!linkExisting && (!firstName.trim() || !lastName.trim()))))) {
       Alert.alert('Dati mancanti', mode === 'register' ? 'Nome, cognome, email, telefono e password sono obbligatori.' : 'Inserisci email o telefono e password.');
       return;
     }
     setLoading(true);
     try {
-      const result = await apiFetch<{ access_token: string }>(mode === 'login' ? '/api/mobile/auth/token' : '/api/mobile/auth/register', {
+      const path = mode === 'login'
+        ? '/api/mobile/auth/token'
+        : linkExisting
+          ? '/api/mobile/auth/link'
+          : '/api/mobile/auth/register';
+      const body = mode === 'login'
+        ? { email: normalizedEmail, password }
+        : linkExisting
+          ? { email: normalizedEmail, phone: normalizedPhone, password }
+          : { first_name: firstName, last_name: lastName, phone: normalizedPhone, email: normalizedEmail, password };
+      const result = await apiFetch<{ access_token: string }>(path, {
         method: 'POST',
-        body: JSON.stringify(mode === 'login' ? { email: normalizedEmail, password } : { first_name: firstName, last_name: lastName, phone: normalizedPhone, email: normalizedEmail, password }),
+        body: JSON.stringify(body),
       });
       await saveToken(result.access_token);
       onSuccess();
@@ -75,12 +133,12 @@ function AuthScreen({ onSuccess }: { onSuccess: () => void }) {
     } finally { setLoading(false); }
   };
 
-  return <SafeAreaView style={styles.screen}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.grow}><ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled"><Brand /><View style={styles.authCard}><View style={styles.segment}><Segment active={mode === 'login'} label="Accedi" onPress={() => setMode('login')} /><Segment active={mode === 'register'} label="Registrati" onPress={() => setMode('register')} /></View>
-    {mode === 'register' && <><Field label="Nome" value={firstName} onChangeText={setFirstName} /><Field label="Cognome" value={lastName} onChangeText={setLastName} /><Field label="Telefono obbligatorio" value={phone} onChangeText={setPhone} keyboardType="phone-pad" /> </>}
-    <Field label={identifierLabel} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-    <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
-    <Pressable style={styles.primaryButton} onPress={submit} disabled={loading}><Text style={styles.primaryButtonText}>{loading ? 'Attendi...' : mode === 'login' ? 'Entra' : 'Crea il tuo account'}</Text></Pressable>
-  </View><Pressable onPress={() => setShowServer(!showServer)}><Text style={styles.serverLink}>Configurazione server</Text></Pressable>{showServer && <View style={styles.serverBox}><Field label="Indirizzo API" value={apiUrl} onChangeText={setApiUrl} autoCapitalize="none" /><Pressable style={styles.textButton} onPress={() => saveApiUrl(apiUrl).then(() => Alert.alert('Salvato', 'Indirizzo del server aggiornato.'))}><Text style={styles.textButtonLabel}>Salva indirizzo</Text></Pressable></View>}</ScrollView></KeyboardAvoidingView><StatusBar style="dark" /></SafeAreaView>;
+  return <SafeAreaView style={styles.screen}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.grow}><ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled"><Brand /><View style={styles.authCard}><View style={styles.segment}><Segment active={mode === 'login'} label="Accedi" onPress={() => changeMode('login')} /><Segment active={mode === 'register'} label="Registrati" onPress={() => changeMode('register')} /></View>
+    {mode === 'register' && <>{!linkExisting && <><Field label="Nome" value={firstName} onChangeText={setFirstName} /><Field label="Cognome" value={lastName} onChangeText={setLastName} /></>}<Field label="Telefono obbligatorio" value={phone} onChangeText={updatePhone} onBlur={checkExistingProfile} keyboardType="phone-pad" /> </>}
+    <Field label={identifierLabel} value={email} onChangeText={mode === 'register' ? updateEmail : setEmail} onBlur={mode === 'register' ? checkExistingProfile : undefined} keyboardType="email-address" autoCapitalize="none" />
+    <Field label={linkExisting ? 'Password del profilo esistente' : 'Password'} value={password} onChangeText={setPassword} secureTextEntry />
+    <Pressable style={styles.primaryButton} onPress={submit} disabled={loading}><Text style={styles.primaryButtonText}>{loading ? 'Attendi...' : mode === 'login' ? 'Entra' : linkExisting ? 'Collega e accedi' : 'Crea il tuo account'}</Text></Pressable>
+  </View><Pressable onPress={() => setShowServer(!showServer)}><Text style={styles.serverLink}>Configurazione server</Text></Pressable>{showServer && <View style={styles.serverBox}><Field label="Indirizzo API" value={apiUrl} onChangeText={setApiUrl} autoCapitalize="none" /><Pressable style={styles.textButton} onPress={() => saveApiUrl(apiUrl).then(() => Alert.alert('Salvato', 'Indirizzo del server aggiornato.'))}><Text style={styles.textButtonLabel}>Salva indirizzo</Text></Pressable></View>}</ScrollView></KeyboardAvoidingView><Modal transparent visible={showLinkPrompt} animationType="fade" onRequestClose={() => setShowLinkPrompt(false)}><View style={styles.modalOverlay}><View style={styles.linkDialog}><Text style={styles.linkDialogTitle}>Profilo esistente</Text><Text style={styles.linkDialogMessage}>Vuoi usare questo profilo anche per prenotare come cliente? Dovrai accedere con la password già associata al profilo.</Text><View style={styles.linkDialogActions}><Pressable style={styles.linkCancelButton} onPress={() => setShowLinkPrompt(false)}><Text style={styles.linkCancelText}>Non ora</Text></Pressable><Pressable style={styles.linkConfirmButton} onPress={() => { setShowLinkPrompt(false); setLinkExisting(true); }}><Text style={styles.linkConfirmText}>Sì, collega</Text></Pressable></View></View></View></Modal><StatusBar style="dark" /></SafeAreaView>;
 }
 
 function CustomerApp({ onLogout }: { onLogout: () => Promise<void> | void }) {
@@ -138,7 +196,7 @@ function Profile({ onLogout }: { onLogout: () => Promise<void> | void }) {
   return <ScrollView contentContainerStyle={styles.content}>{profile && <View style={styles.profileCard}><View style={styles.avatar}><Text style={styles.avatarText}>{profile.first_name[0]}{profile.last_name[0]}</Text></View><Text style={styles.profileName}>{profile.first_name} {profile.last_name}</Text><Text style={styles.muted}>{profile.email}</Text>{Boolean(profile.phone) && <Text style={styles.muted}>{profile.phone}</Text>}</View>}<View style={styles.serverBox}><Text style={styles.fieldLabel}>INDIRIZZO BACKEND</Text><TextInput style={styles.input} value={apiUrl} onChangeText={setApiUrl} autoCapitalize="none" /><Pressable style={styles.textButton} onPress={() => saveApiUrl(apiUrl).then(() => Alert.alert('Salvato', 'Il nuovo server sarÃ  usato per le prossime richieste.'))}><Text style={styles.textButtonLabel}>Aggiorna server</Text></Pressable></View><Pressable style={styles.logoutButton} onPress={() => { void onLogout(); }}><Text style={styles.logoutText}>Esci dall'account</Text></Pressable></ScrollView>;
 }
 
-function Field(props: { label: string; value: string; onChangeText: (value: string) => void; secureTextEntry?: boolean; keyboardType?: 'default' | 'email-address' | 'phone-pad'; autoCapitalize?: 'none' | 'sentences' | 'words' }) { return <View style={styles.field}><Text style={styles.fieldLabel}>{props.label}</Text><TextInput style={styles.input} value={props.value} onChangeText={props.onChangeText} secureTextEntry={props.secureTextEntry} keyboardType={props.keyboardType} autoCapitalize={props.autoCapitalize ?? 'words'} /></View>; }
+function Field(props: { label: string; value: string; onChangeText: (value: string) => void; onBlur?: () => void; secureTextEntry?: boolean; keyboardType?: 'default' | 'email-address' | 'phone-pad'; autoCapitalize?: 'none' | 'sentences' | 'words' }) { return <View style={styles.field}><Text style={styles.fieldLabel}>{props.label}</Text><TextInput style={styles.input} value={props.value} onChangeText={props.onChangeText} onBlur={props.onBlur} secureTextEntry={props.secureTextEntry} keyboardType={props.keyboardType} autoCapitalize={props.autoCapitalize ?? 'words'} /></View>; }
 function Segment({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) { return <Pressable onPress={onPress} style={[styles.segmentItem, active && styles.segmentItemActive]}><Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text></Pressable>; }
 function Choice({ active, title, subtitle, onPress }: { active: boolean; title: string; subtitle: string; onPress: () => void }) { return <Pressable onPress={onPress} style={[styles.choice, active && styles.choiceActive]}><Text style={[styles.choiceTitle, active && styles.choiceTitleActive]}>{title}</Text><Text style={[styles.choiceSubtitle, active && styles.choiceSubtitleActive]}>{subtitle}</Text></Pressable>; }
 function SectionTitle({ number, title }: { number: string; title: string }) { return <View style={styles.sectionTitle}><Text style={styles.sectionNumber}>{number}</Text><Text style={styles.sectionText}>{title}</Text></View>; }
@@ -170,6 +228,15 @@ const styles = StyleSheet.create({
   serverBox: { padding: 16, marginTop: 18, backgroundColor: '#f8f0eb', borderRadius: 6 },
   textButton: { marginTop: 10 },
   textButtonLabel: { color: '#75523f', fontWeight: '700', fontSize: 14 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(38, 28, 23, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  linkDialog: { width: '100%', maxWidth: 420, backgroundColor: '#fffaf7', borderRadius: 10, padding: 22, borderWidth: 1, borderColor: '#eadbd1' },
+  linkDialogTitle: { color: '#45352e', fontSize: 19, fontWeight: '700', marginBottom: 10 },
+  linkDialogMessage: { color: '#6f5c52', fontSize: 15, lineHeight: 22 },
+  linkDialogActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 22, gap: 10 },
+  linkCancelButton: { paddingVertical: 11, paddingHorizontal: 14 },
+  linkCancelText: { color: '#795948', fontSize: 14, fontWeight: '600' },
+  linkConfirmButton: { backgroundColor: '#795948', borderRadius: 5, paddingVertical: 11, paddingHorizontal: 16 },
+  linkConfirmText: { color: '#fffaf7', fontSize: 14, fontWeight: '700' },
   centerSelectBox: { marginBottom: 18, paddingBottom: 14, borderBottomWidth: 1, borderColor: '#eee0d8' },
   centerChip: { borderWidth: 1, borderColor: '#d0b5a3', backgroundColor: '#f7f0ec', paddingHorizontal: 14, paddingVertical: 10, marginRight: 10, borderRadius: 18 },
   centerChipActive: { backgroundColor: '#7b5845', borderColor: '#7b5845' },
