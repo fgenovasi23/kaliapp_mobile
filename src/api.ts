@@ -4,7 +4,9 @@ import { Platform } from 'react-native';
 const TOKEN_KEY = 'kali_customer_token';
 const API_URL_KEY = 'kali_api_url';
 const isWeb = Platform.OS === 'web';
-const DEFAULT_API_URL = isWeb ? 'http://localhost:8000' : (process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:8000');
+const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
+const WEB_LOCALHOST_DEFAULT = 'http://localhost:8000';
+const DEFAULT_API_URL = ENV_API_URL || (isWeb ? WEB_LOCALHOST_DEFAULT : 'http://10.0.2.2:8000');
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -13,7 +15,11 @@ export class ApiError extends Error {
 }
 
 export async function getApiUrl() {
-  if (isWeb) return localStorage.getItem(API_URL_KEY) ?? DEFAULT_API_URL;
+  if (isWeb) {
+    const savedUrl = localStorage.getItem(API_URL_KEY);
+    if (ENV_API_URL && (!savedUrl || savedUrl === WEB_LOCALHOST_DEFAULT)) return ENV_API_URL;
+    return savedUrl ?? DEFAULT_API_URL;
+  }
   return (await SecureStore.getItemAsync(API_URL_KEY)) ?? DEFAULT_API_URL;
 }
 

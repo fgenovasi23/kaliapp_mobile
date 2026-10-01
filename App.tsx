@@ -44,8 +44,6 @@ function Brand() {
 
 function AuthScreen({ onSuccess }: { onSuccess: () => void }) {
   const [mode, setMode] = useState<AuthMode>('login');
-  const [centers, setCenters] = useState<Center[]>([]);
-  const [selectedCenter, setSelectedCenter] = useState<Center | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
@@ -54,31 +52,21 @@ function AuthScreen({ onSuccess }: { onSuccess: () => void }) {
   const [loading, setLoading] = useState(false);
   const [apiUrl, setApiUrl] = useState('');
   const [showServer, setShowServer] = useState(false);
-  const identifierLabel = mode === 'login' ? 'Email o telefono' : 'Email o telefono';
+  const identifierLabel = mode === 'login' ? 'Email o telefono' : 'Email obbligatoria';
 
   useEffect(() => { getApiUrl().then(setApiUrl); }, []);
-  useEffect(() => {
-    if (mode === 'register') {
-      apiFetch<Center[]>('/api/mobile/centers').then(setCenters).catch(() => setCenters([]));
-    }
-  }, [mode]);
-
   const submit = async () => {
     const normalizedEmail = email.trim();
     const normalizedPhone = phone.trim();
-    if ((!normalizedEmail && !normalizedPhone) || !password || (mode === 'register' && (!firstName || !lastName || !selectedCenter))) {
-      Alert.alert('Dati mancanti', 'Inserisci almeno email o telefono, la password e i dati richiesti.');
-      return;
-    }
-    if (mode === 'register' && !normalizedEmail && !normalizedPhone) {
-      Alert.alert('Dati mancanti', 'Per la registrazione serve almeno email o telefono.');
+    if (!password || (mode === 'login' && !normalizedEmail) || (mode === 'register' && (!firstName || !lastName || !normalizedEmail || !normalizedPhone))) {
+      Alert.alert('Dati mancanti', mode === 'register' ? 'Nome, cognome, email, telefono e password sono obbligatori.' : 'Inserisci email o telefono e password.');
       return;
     }
     setLoading(true);
     try {
       const result = await apiFetch<{ access_token: string }>(mode === 'login' ? '/api/mobile/auth/token' : '/api/mobile/auth/register', {
         method: 'POST',
-        body: JSON.stringify(mode === 'login' ? { email: email.trim(), password } : { first_name: firstName, last_name: lastName, phone: normalizedPhone || '', email: normalizedEmail || '', password, center_id: selectedCenter!.id }),
+        body: JSON.stringify(mode === 'login' ? { email: normalizedEmail, password } : { first_name: firstName, last_name: lastName, phone: normalizedPhone, email: normalizedEmail, password }),
       });
       await saveToken(result.access_token);
       onSuccess();
@@ -87,10 +75,9 @@ function AuthScreen({ onSuccess }: { onSuccess: () => void }) {
     } finally { setLoading(false); }
   };
 
-  return <SafeAreaView style={styles.screen}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.grow}><ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled"><Brand /><View style={styles.authCard}><View style={styles.segment}><Segment active={mode === 'login'} label="Accedi" onPress={() => { setMode('login'); setSelectedCenter(null); }} /><Segment active={mode === 'register'} label="Registrati" onPress={() => setMode('register')} /></View>
-    {mode === 'register' && <><View style={styles.centerSelectBox}><Text style={styles.fieldLabel}>SCEGLI IL TUO CENTRO</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{centers.map((center) => <Pressable key={center.id} style={[styles.centerChip, selectedCenter?.id === center.id && styles.centerChipActive]} onPress={() => setSelectedCenter(center)}><Text style={selectedCenter?.id === center.id ? styles.centerChipTextActive : styles.centerChipText}>{center.name}</Text></Pressable>)}</ScrollView></View><Field label="Nome" value={firstName} onChangeText={setFirstName} /><Field label="Cognome" value={lastName} onChangeText={setLastName} /></>}
+  return <SafeAreaView style={styles.screen}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.grow}><ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled"><Brand /><View style={styles.authCard}><View style={styles.segment}><Segment active={mode === 'login'} label="Accedi" onPress={() => setMode('login')} /><Segment active={mode === 'register'} label="Registrati" onPress={() => setMode('register')} /></View>
+    {mode === 'register' && <><Field label="Nome" value={firstName} onChangeText={setFirstName} /><Field label="Cognome" value={lastName} onChangeText={setLastName} /><Field label="Telefono obbligatorio" value={phone} onChangeText={setPhone} keyboardType="phone-pad" /> </>}
     <Field label={identifierLabel} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-    <Field label="Telefono" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
     <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
     <Pressable style={styles.primaryButton} onPress={submit} disabled={loading}><Text style={styles.primaryButtonText}>{loading ? 'Attendi...' : mode === 'login' ? 'Entra' : 'Crea il tuo account'}</Text></Pressable>
   </View><Pressable onPress={() => setShowServer(!showServer)}><Text style={styles.serverLink}>Configurazione server</Text></Pressable>{showServer && <View style={styles.serverBox}><Field label="Indirizzo API" value={apiUrl} onChangeText={setApiUrl} autoCapitalize="none" /><Pressable style={styles.textButton} onPress={() => saveApiUrl(apiUrl).then(() => Alert.alert('Salvato', 'Indirizzo del server aggiornato.'))}><Text style={styles.textButtonLabel}>Salva indirizzo</Text></Pressable></View>}</ScrollView></KeyboardAvoidingView><StatusBar style="dark" /></SafeAreaView>;
