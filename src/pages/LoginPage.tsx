@@ -73,6 +73,10 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
       Alert.alert('Dati mancanti', mode === 'register' ? 'Nome, cognome, email, telefono e password sono obbligatori.' : 'Inserisci email o telefono e password.');
       return;
     }
+    if (mode === 'register' && password.length < 8) {
+      Alert.alert('Password non valida', 'La password deve contenere almeno 8 caratteri.');
+      return;
+    }
 
     setLoading(true);
     try {
