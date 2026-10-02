@@ -93,13 +93,13 @@ export default function DiscoverPage({ onBooked }: { onBooked: () => void }) {
     {loading ? <ActivityIndicator color="#9f7b64" /> : <>
       <SectionTitle number="01" title="Scegli il centro" />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
-        {centers.map((center) => <Choice key={center.id} active={draft.center?.id === center.id} title={center.name} subtitle={center.address || 'Scopri il centro'} onPress={() => selectCenter(center)} />)}
+        {centers.map((center) => <Choice key={center.id} active={draft.center?.id === center.id} title={center.name} subtitle={center.address || 'Indirizzo non disponibile'} onPress={() => selectCenter(center)} />)}
       </ScrollView>
       {draft.center && <>
         <SectionTitle number="02" title="Scegli i servizi" />
-        <View style={styles.choiceGrid}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
           {services.map((service) => <Choice key={service.id} active={draft.services.some((item) => item.id === service.id)} title={service.name} subtitle={`${service.duration_minutes} min Â· ${money(Number(service.price))}`} onPress={() => toggleService(service)} />)}
-        </View>
+        </ScrollView>
         <SectionTitle number="03" title="Scegli l'estetista" />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>
           {beauticians.map((beautician) => <Choice key={beautician.id} active={draft.beautician?.id === beautician.id} title={`${beautician.first_name} ${beautician.last_name}`} subtitle="Estetista" onPress={() => setDraft({ ...draft, beautician, time: null })} />)}
@@ -121,14 +121,19 @@ export default function DiscoverPage({ onBooked }: { onBooked: () => void }) {
           </Pressable>)}
         </View>
       </>}
-      {draft.time && <View style={styles.summary}>
-        <Text style={styles.summaryTitle}>{draft.center?.name}</Text>
-        <Text style={styles.summaryText}>{draft.services.map((service) => service.name).join(' Â· ')}</Text>
-        <Text style={styles.summaryText}>{formatDate(draft.date!)} alle {draft.time} Â· {money(total)}</Text>
+      {draft.time && <>
+        <Text style={styles.confirmationHeading}>Conferma</Text>
+        <View style={styles.summary}>
+          <Text style={styles.summaryTitle}>{draft.center?.name}</Text>
+          <Text style={styles.summaryText}>Estetista: {draft.beautician?.first_name} {draft.beautician?.last_name}</Text>
+          <Text style={styles.summaryText}>Servizi: {draft.services.map((service) => service.name).join(', ')}</Text>
+          <Text style={styles.summaryTotal}>Totale: {money(total)}</Text>
+          <Text style={styles.summaryText}>{formatDate(draft.date!)} alle {draft.time}</Text>
+        </View>
         <Pressable style={styles.primaryButton} onPress={book} disabled={submitting}>
           <Text style={styles.primaryButtonText}>{submitting ? 'Conferma in corso...' : 'Conferma prenotazione'}</Text>
         </Pressable>
-      </View>}
+      </>}
     </>}
   </ScrollView>;
 }
