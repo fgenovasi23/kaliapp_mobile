@@ -4,11 +4,13 @@ import { Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } fro
 import { apiFetch, apiFetchBlob, getApiUrl, saveApiUrl } from '../api';
 import type { Profile } from '../types';
 import showError from '../utils/showError';
+import { previewUsername } from '../utils/usernames';
 import styles from './ProfilePage.styles';
 
 export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void> | void }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [savedProfile, setSavedProfile] = useState<Profile | null>(null);
+  const [usernamePreview, setUsernamePreview] = useState('');
   const [apiUrl, setApiUrl] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [savedPhotoUri, setSavedPhotoUri] = useState<string | null>(null);
@@ -28,6 +30,38 @@ export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void
     }).catch(showError);
     getApiUrl().then(setApiUrl);
   }, []);
+
+  useEffect(() => {
+    if (!profile) return;
+    const firstName = profile.first_name.trim();
+    const lastName = profile.last_name.trim();
+    const namesUnchanged = firstName === savedProfile?.first_name && lastName === savedProfile?.last_name;
+    if (!editing || namesUnchanged) {
+      setUsernamePreview(profile.username);
+      return;
+    }
+
+    setUsernamePreview(previewUsername(firstName, lastName));
+    if (!firstName || !lastName) return;
+
+    let active = true;
+    const timeoutId = setTimeout(async () => {
+      try {
+        const result = await apiFetch<{ username: string }>('/api/mobile/me/username-preview', {
+          method: 'POST',
+          body: JSON.stringify({ first_name: firstName, last_name: lastName }),
+        });
+        if (active) setUsernamePreview(result.username);
+      } catch {
+        // Keep the local preview when the server cannot provide the collision suffix.
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
+  }, [editing, profile?.first_name, profile?.last_name, profile?.username, savedProfile?.first_name, savedProfile?.last_name]);
 
   useEffect(() => {
     if (!profile?.has_profile_photo) {
@@ -87,7 +121,6 @@ export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void
       const updated = await apiFetch<Profile>('/api/mobile/me/profile', {
         method: 'PUT',
         body: JSON.stringify({
-          ...profile,
           first_name: profile.first_name.trim(),
           last_name: profile.last_name.trim(),
           email: profile.email.trim(),
@@ -164,6 +197,15 @@ export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void
     performDelete();
   };
 
+  const namesChanged = Boolean(profile && savedProfile && (
+    profile.first_name.trim() !== savedProfile.first_name || profile.last_name.trim() !== savedProfile.last_name
+  ));
+  const visibleUsername = profile
+    ? editing && namesChanged
+      ? usernamePreview || previewUsername(profile.first_name, profile.last_name)
+      : profile.username
+    : '';
+
   return <>
     <ScrollView contentContainerStyle={styles.content}>
     {profile && <View style={styles.profileCard}>
@@ -188,6 +230,7 @@ export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void
         {editing ? <>
           <ProfileField label="Nome" value={profile.first_name} keyboardType="default" onChangeText={(value) => updateField('first_name', value)} />
           <ProfileField label="Cognome" value={profile.last_name} keyboardType="default" onChangeText={(value) => updateField('last_name', value)} />
+          <ProfileField label="Username" value={visibleUsername} editable={false} />
           <ProfileField label="Email" value={profile.email} keyboardType="email-address" onChangeText={(value) => updateField('email', value)} />
           <ProfileField label="Telefono" value={profile.phone} keyboardType="phone-pad" onChangeText={(value) => updateField('phone', value)} />
           <ProfileField label="Data di nascita" value={profile.birth_date ?? ''} placeholder="AAAA-MM-GG" keyboardType="default" onChangeText={(value) => updateField('birth_date', value)} />
@@ -196,6 +239,7 @@ export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void
           <ProfileField label="CAP" value={profile.postal_code ?? ''} keyboardType="numeric" onChangeText={(value) => updateField('postal_code', value)} />
           <ProfileField label="Città" value={profile.city ?? ''} keyboardType="default" onChangeText={(value) => updateField('city', value)} />
         </> : <View style={styles.profileGrid}>
+          <ProfileData label="Username" value={profile.username} wide />
           <ProfileData label="Email" value={profile.email} wide />
           <ProfileData label="Telefono" value={profile.phone} />
           <ProfileData label="Data di nascita" value={profile.birth_date || '—'} />
@@ -262,12 +306,14 @@ function ProfileField({
   placeholder,
   keyboardType,
   onChangeText,
+  editable = true,
 }: {
   label: string;
   value: string;
   placeholder?: string;
   keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'numeric';
-  onChangeText: (value: string) => void;
+  onChangeText?: (value: string) => void;
+  editable?: boolean;
 }) {
   return <View style={styles.field}>
     <Text style={styles.fieldLabel}>{label}</Text>
@@ -277,6 +323,7 @@ function ProfileField({
       placeholder={placeholder}
       keyboardType={keyboardType}
       autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
+      editable={editable}
       onChangeText={onChangeText}
     />
   </View>;

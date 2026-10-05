@@ -2,6 +2,7 @@ export type Center = { id: number; name: string; address: string; phone: string;
 export type Service = { id: number; name: string; duration_minutes: number; price: number };
 export type Beautician = { id: number; first_name: string; last_name: string };
 export type Profile = {
+  username: string;
   first_name: string;
   last_name: string;
   email: string;

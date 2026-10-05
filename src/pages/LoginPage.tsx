@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import { apiFetch, getApiUrl, saveApiUrl, saveToken } from '../api';
+import { previewUsername } from '../utils/usernames';
 import styles from './LoginPage.styles';
 
 type AuthMode = 'login' | 'register';
@@ -9,8 +10,10 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   const [mode, setMode] = useState<AuthMode>('login');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [registrationUsername, setRegistrationUsername] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [apiUrl, setApiUrl] = useState('');
@@ -19,9 +22,32 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   const [showLinkPrompt, setShowLinkPrompt] = useState(false);
   const checkedContactPair = useRef('');
   const contactLookupId = useRef(0);
-  const identifierLabel = mode === 'login' ? 'Email o telefono' : 'Email obbligatoria';
-
   useEffect(() => { getApiUrl().then(setApiUrl); }, []);
+
+  useEffect(() => {
+    const normalizedFirstName = firstName.trim();
+    const normalizedLastName = lastName.trim();
+    setRegistrationUsername(previewUsername(normalizedFirstName, normalizedLastName));
+    if (mode !== 'register' || linkExisting || !normalizedFirstName || !normalizedLastName) return;
+
+    let active = true;
+    const timeoutId = setTimeout(async () => {
+      try {
+        const result = await apiFetch<{ username: string }>('/api/mobile/auth/username-preview', {
+          method: 'POST',
+          body: JSON.stringify({ first_name: normalizedFirstName, last_name: normalizedLastName }),
+        });
+        if (active) setRegistrationUsername(result.username);
+      } catch {
+        // Keep the local preview available if the lookup cannot reach the API.
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
+  }, [firstName, lastName, mode, linkExisting]);
 
   const checkExistingProfile = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -69,8 +95,9 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   const submit = async () => {
     const normalizedEmail = email.trim();
     const normalizedPhone = phone.trim();
-    if (!password || (mode === 'login' && !normalizedEmail) || (mode === 'register' && (!normalizedEmail || !normalizedPhone || (!linkExisting && (!firstName.trim() || !lastName.trim()))))) {
-      Alert.alert('Dati mancanti', mode === 'register' ? 'Nome, cognome, email, telefono e password sono obbligatori.' : 'Inserisci email o telefono e password.');
+    const normalizedUsername = username.trim();
+    if (!password || (mode === 'login' && !normalizedUsername) || (mode === 'register' && (!normalizedEmail || !normalizedPhone || (!linkExisting && (!firstName.trim() || !lastName.trim()))))) {
+      Alert.alert('Dati mancanti', mode === 'register' ? 'Nome, cognome, email, telefono e password sono obbligatori.' : 'Inserisci username e password.');
       return;
     }
     if (mode === 'register' && password.length < 8) {
@@ -86,11 +113,11 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
           ? '/api/mobile/auth/link'
           : '/api/mobile/auth/register';
       const body = mode === 'login'
-        ? { email: normalizedEmail, password }
+        ? { username: normalizedUsername, password }
         : linkExisting
           ? { email: normalizedEmail, phone: normalizedPhone, password }
           : { first_name: firstName, last_name: lastName, phone: normalizedPhone, email: normalizedEmail, password };
-      const result = await apiFetch<{ access_token: string }>(path, {
+      const result = await apiFetch<{ access_token: string; username: string }>(path, {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -120,7 +147,14 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
               </>}
               <Field label="Telefono obbligatorio" value={phone} onChangeText={updatePhone} onBlur={checkExistingProfile} keyboardType="phone-pad" />
             </>}
-            <Field label={identifierLabel} value={email} onChangeText={mode === 'register' ? updateEmail : setEmail} onBlur={mode === 'register' ? checkExistingProfile : undefined} keyboardType="email-address" autoCapitalize="none" />
+            {mode === 'login' ? (
+              <Field label="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
+            ) : (
+              <Field label="Email obbligatoria" value={email} onChangeText={updateEmail} onBlur={checkExistingProfile} keyboardType="email-address" autoCapitalize="none" />
+            )}
+            {mode === 'register' && !linkExisting && (
+              <Field label="Username" value={registrationUsername} editable={false} autoCapitalize="none" />
+            )}
             <Field label={linkExisting ? 'Password del profilo esistente' : 'Password'} value={password} onChangeText={setPassword} secureTextEntry />
             <Pressable style={styles.primaryButton} onPress={submit} disabled={loading}>
               <Text style={styles.primaryButtonText}>{loading ? 'Attendi...' : mode === 'login' ? 'Entra' : linkExisting ? 'Collega e accedi' : 'Crea il tuo account'}</Text>
@@ -161,8 +195,8 @@ function Brand() {
   return <View style={styles.brand}><View style={styles.brandMark}><Text style={styles.brandLeaf}>K</Text></View><Text style={styles.brandName}>kali</Text><Text style={styles.brandTagline}>BEAUTY, AT YOUR TIME</Text></View>;
 }
 
-function Field(props: { label: string; value: string; onChangeText: (value: string) => void; onBlur?: () => void; secureTextEntry?: boolean; keyboardType?: 'default' | 'email-address' | 'phone-pad'; autoCapitalize?: 'none' | 'sentences' | 'words' }) {
-  return <View style={styles.field}><Text style={styles.fieldLabel}>{props.label}</Text><TextInput style={styles.input} value={props.value} onChangeText={props.onChangeText} onBlur={props.onBlur} secureTextEntry={props.secureTextEntry} keyboardType={props.keyboardType} autoCapitalize={props.autoCapitalize ?? 'words'} /></View>;
+function Field(props: { label: string; value: string; onChangeText?: (value: string) => void; onBlur?: () => void; secureTextEntry?: boolean; editable?: boolean; keyboardType?: 'default' | 'email-address' | 'phone-pad'; autoCapitalize?: 'none' | 'sentences' | 'words' }) {
+  return <View style={styles.field}><Text style={styles.fieldLabel}>{props.label}</Text><TextInput style={styles.input} value={props.value} onChangeText={props.onChangeText} onBlur={props.onBlur} secureTextEntry={props.secureTextEntry} editable={props.editable ?? true} keyboardType={props.keyboardType} autoCapitalize={props.autoCapitalize ?? 'words'} /></View>;
 }
 
 function Segment({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
