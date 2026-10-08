@@ -13,6 +13,8 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   const [registrationUsername, setRegistrationUsername] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [province, setProvince] = useState('');
+  const [municipality, setMunicipality] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -116,7 +118,7 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
         ? { username: normalizedUsername, password }
         : linkExisting
           ? { email: normalizedEmail, phone: normalizedPhone, password }
-          : { first_name: firstName, last_name: lastName, phone: normalizedPhone, email: normalizedEmail, password };
+          : { first_name: firstName, last_name: lastName, phone: normalizedPhone, email: normalizedEmail, password, province: province.trim(), municipality: municipality.trim() };
       const result = await apiFetch<{ access_token: string; username: string }>(path, {
         method: 'POST',
         body: JSON.stringify(body),
@@ -144,6 +146,8 @@ export default function LoginPage({ onSuccess }: { onSuccess: () => void }) {
               {!linkExisting && <>
                 <Field label="Nome" value={firstName} onChangeText={setFirstName} />
                 <Field label="Cognome" value={lastName} onChangeText={setLastName} />
+                <Field label="Provincia" value={province} onChangeText={setProvince} />
+                <Field label="Comune" value={municipality} onChangeText={setMunicipality} />
               </>}
               <Field label="Telefono obbligatorio" value={phone} onChangeText={updatePhone} onBlur={checkExistingProfile} keyboardType="phone-pad" />
             </>}

@@ -129,7 +129,8 @@ export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void
           tax_code: profile.tax_code?.trim() || '',
           address: profile.address?.trim() || '',
           postal_code: profile.postal_code?.trim() || '',
-          city: profile.city?.trim() || '',
+          province: profile.province?.trim() || '',
+          municipality: profile.municipality?.trim() || '',
           ...(photoBase64 ? { profile_photo_base64: photoBase64 } : {}),
         }),
       });
@@ -237,7 +238,8 @@ export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void
           <ProfileField label="Codice fiscale" value={profile.tax_code ?? ''} keyboardType="default" onChangeText={(value) => updateField('tax_code', value)} />
           <ProfileField label="Indirizzo" value={profile.address ?? ''} keyboardType="default" onChangeText={(value) => updateField('address', value)} />
           <ProfileField label="CAP" value={profile.postal_code ?? ''} keyboardType="numeric" onChangeText={(value) => updateField('postal_code', value)} />
-          <ProfileField label="Città" value={profile.city ?? ''} keyboardType="default" onChangeText={(value) => updateField('city', value)} />
+          <ProfileField label="Provincia" value={profile.province ?? ''} keyboardType="default" onChangeText={(value) => updateField('province', value)} />
+          <ProfileField label="Comune" value={profile.municipality ?? ''} keyboardType="default" onChangeText={(value) => updateField('municipality', value)} />
         </> : <View style={styles.profileGrid}>
           <ProfileData label="Username" value={profile.username} wide />
           <ProfileData label="Email" value={profile.email} wide />
@@ -246,7 +248,8 @@ export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void
           <ProfileData label="Codice fiscale" value={profile.tax_code || '—'} />
           <ProfileData label="Indirizzo" value={profile.address || '—'} wide />
           <ProfileData label="CAP" value={profile.postal_code || '—'} />
-          <ProfileData label="Città" value={profile.city || '—'} />
+          <ProfileData label="Provincia" value={profile.province || '—'} />
+          <ProfileData label="Comune" value={profile.municipality || '—'} />
         </View>}
       </View>
       {editing ? (
@@ -296,7 +299,8 @@ function normalizeProfile(profile: Profile): Profile {
     tax_code: profile.tax_code ?? '',
     address: profile.address ?? '',
     postal_code: profile.postal_code ?? '',
-    city: profile.city ?? '',
+    province: profile.province ?? '',
+    municipality: profile.municipality ?? '',
   };
 }
 

@@ -11,7 +11,8 @@ export type Profile = {
   tax_code: string | null;
   address: string | null;
   postal_code: string | null;
-  city: string | null;
+  province: string | null;
+  municipality: string | null;
   has_profile_photo: boolean;
 };
 export type Appointment = {
