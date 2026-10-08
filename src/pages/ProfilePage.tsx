@@ -5,6 +5,8 @@ import { apiFetch, apiFetchBlob, getApiUrl, saveApiUrl } from '../api';
 import type { Profile } from '../types';
 import showError from '../utils/showError';
 import { previewUsername } from '../utils/usernames';
+import ProvinceMunicipalityFields from '../components/ProvinceMunicipalityFields';
+import { isValidEmail, isValidPhone, isValidTaxCode, sanitizePhone } from '../utils/fieldValidation';
 import styles from './ProfilePage.styles';
 
 export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void> | void }) {
@@ -103,6 +105,22 @@ export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void
   const saveProfile = async () => {
     if (!profile || !profile.first_name.trim() || !profile.last_name.trim() || !profile.email.trim() || !profile.phone.trim()) {
       setProfileError('Nome, cognome, email e telefono sono obbligatori.');
+      return;
+    }
+    if (!isValidEmail(profile.email)) {
+      setProfileError('Inserisci un indirizzo email valido.');
+      return;
+    }
+    if (!isValidPhone(profile.phone)) {
+      setProfileError('Il telefono deve contenere esattamente 10 cifre.');
+      return;
+    }
+    if (!isValidTaxCode(profile.tax_code ?? '')) {
+      setProfileError('Il codice fiscale non è valido.');
+      return;
+    }
+    if (!profile.province || !profile.municipality) {
+      setProfileError('Seleziona provincia e comune.');
       return;
     }
     setSaving(true);
@@ -232,14 +250,13 @@ export default function ProfilePage({ onLogout }: { onLogout: () => Promise<void
           <ProfileField label="Nome" value={profile.first_name} keyboardType="default" onChangeText={(value) => updateField('first_name', value)} />
           <ProfileField label="Cognome" value={profile.last_name} keyboardType="default" onChangeText={(value) => updateField('last_name', value)} />
           <ProfileField label="Username" value={visibleUsername} editable={false} />
-          <ProfileField label="Email" value={profile.email} keyboardType="email-address" onChangeText={(value) => updateField('email', value)} />
-          <ProfileField label="Telefono" value={profile.phone} keyboardType="phone-pad" onChangeText={(value) => updateField('phone', value)} />
+          <ProfileField label="Email" value={profile.email} keyboardType="email-address" invalid={Boolean(profile.email) && !isValidEmail(profile.email)} onChangeText={(value) => updateField('email', value)} />
+          <ProfileField label="Telefono" value={profile.phone} keyboardType="phone-pad" maxLength={10} invalid={Boolean(profile.phone) && !isValidPhone(profile.phone)} onChangeText={(value) => updateField('phone', sanitizePhone(value))} />
           <ProfileField label="Data di nascita" value={profile.birth_date ?? ''} placeholder="AAAA-MM-GG" keyboardType="default" onChangeText={(value) => updateField('birth_date', value)} />
-          <ProfileField label="Codice fiscale" value={profile.tax_code ?? ''} keyboardType="default" onChangeText={(value) => updateField('tax_code', value)} />
+          <ProfileField label="Codice fiscale" value={profile.tax_code ?? ''} keyboardType="default" maxLength={16} invalid={Boolean(profile.tax_code) && !isValidTaxCode(profile.tax_code ?? '')} onChangeText={(value) => updateField('tax_code', value.toUpperCase())} />
           <ProfileField label="Indirizzo" value={profile.address ?? ''} keyboardType="default" onChangeText={(value) => updateField('address', value)} />
           <ProfileField label="CAP" value={profile.postal_code ?? ''} keyboardType="numeric" onChangeText={(value) => updateField('postal_code', value)} />
-          <ProfileField label="Provincia" value={profile.province ?? ''} keyboardType="default" onChangeText={(value) => updateField('province', value)} />
-          <ProfileField label="Comune" value={profile.municipality ?? ''} keyboardType="default" onChangeText={(value) => updateField('municipality', value)} />
+          <ProvinceMunicipalityFields province={profile.province ?? ''} municipality={profile.municipality ?? ''} onChange={(province, municipality) => setProfile((current) => current ? { ...current, province, municipality } : current)} />
         </> : <View style={styles.profileGrid}>
           <ProfileData label="Username" value={profile.username} wide />
           <ProfileData label="Email" value={profile.email} wide />
@@ -311,6 +328,8 @@ function ProfileField({
   keyboardType,
   onChangeText,
   editable = true,
+  maxLength,
+  invalid = false,
 }: {
   label: string;
   value: string;
@@ -318,16 +337,19 @@ function ProfileField({
   keyboardType?: 'default' | 'email-address' | 'phone-pad' | 'numeric';
   onChangeText?: (value: string) => void;
   editable?: boolean;
+  maxLength?: number;
+  invalid?: boolean;
 }) {
   return <View style={styles.field}>
     <Text style={styles.fieldLabel}>{label}</Text>
     <TextInput
-      style={styles.input}
+      style={[styles.input, invalid && styles.inputInvalid]}
       value={value}
       placeholder={placeholder}
       keyboardType={keyboardType}
       autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
       editable={editable}
+      maxLength={maxLength}
       onChangeText={onChangeText}
     />
   </View>;

@@ -23,6 +23,7 @@ export default StyleSheet.create({
   fieldLabel: { color: '#9a7a67', fontSize: 12, fontWeight: '700', marginBottom: 4 },
   serverBox: { padding: 16, marginTop: 18, backgroundColor: '#f8f0eb', borderRadius: 6 },
   input: { borderBottomWidth: 1, borderColor: '#d8c5ba', color: '#3f352f', fontSize: 16, paddingVertical: 9 },
+  inputInvalid: { borderColor: '#b42318' },
   profileActions: { width: '100%', flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 12 },
   secondaryButton: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 6, backgroundColor: '#eee4dc' },
   secondaryButtonText: { color: '#69574f', fontWeight: '700' },
